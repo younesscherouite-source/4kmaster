@@ -53,15 +53,14 @@ def _run_download(video_id: int, url: str, quality: str):
     fmt = QUALITY_FORMAT_MAP.get(quality, QUALITY_FORMAT_MAP["best"])
 
     ydl_opts = {
-        "format": fmt,
-        "outtmpl": os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s"),
-        "progress_hooks": [_make_progress_hook(video_id)],
-        "quiet": True,
-        "no_warnings": True,
-        "geo_bypass": True,
-        # Don't abort if a requested merge format isn't available — use fallback
-        "ignoreerrors": False,
-        "abort_on_error": False,
+    "format": fmt,
+    "outtmpl": os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s"),
+    "progress_hooks": [_make_progress_hook(video_id)],
+    "quiet": True,
+    "no_warnings": True,
+    "geo_bypass": True,
+    "cookiefile": os.path.join(os.path.dirname(__file__), "..", "..", "cookies.txt"),  # ← زيد هاد السطر
+    "abort_on_error": False,
     }
 
     try:
