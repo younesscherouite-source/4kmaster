@@ -4,21 +4,30 @@ REST API routes:
   GET  /api/videos           — list all downloads
   GET  /api/videos/<id>      — poll a single download for progress
 """
-
 import re
 import logging
-from flask import Blueprint, request, jsonify
+import os
+from flask import Blueprint, request, jsonify, send_from_directory
 
 from backend.models.video import create_video, get_all_videos, get_video_by_id
-from backend.services.downloader import start_download, QUALITY_FORMAT_MAP
+from backend.services.downloader import start_download, QUALITY_FORMAT_MAP, DOWNLOAD_DIR
 
 logger = logging.getLogger(__name__)
 api = Blueprint("api", __name__, url_prefix="/api")
 
 VALID_QUALITIES = list(QUALITY_FORMAT_MAP.keys())
-
-# Very lightweight URL sanity check (yt-dlp will do the real validation)
 URL_RE = re.compile(r"^https?://", re.IGNORECASE)
+
+
+@api.route("/download-file/<path:filename>")
+def download_file(filename):
+    return send_from_directory(
+        os.path.abspath(DOWNLOAD_DIR),
+        filename,
+        as_attachment=True
+    )
+
+# ... باقي الـ routes
 
 
 @api.route("/download", methods=["POST"])
