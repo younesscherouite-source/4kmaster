@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>4K MASTER</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Ambient background grid -->
+  <div class="bg-grid"></div>
+  <div class="bg-glow"></div>
+
+  <!-- ═══ HEADER ═══ -->
+  <header class="header">
+    <div class="logo">
+      <span class="logo-mark">▼</span>
+      <span class="logo-text">4K MASTER</span>
+    </div>
+    <nav class="header-meta">
+      <span class="badge">4K READY</span>
+      <span class="badge badge-accent">BETA</span>
+    </nav>
+  </header>
+
+  <!-- ═══ HERO ═══ -->
+  <section class="hero">
+    <p class="hero-eyebrow">FAST · FREE · NO LIMITS</p>
+    <h1 class="hero-title">
+      Download Any<br />
+      Video <em>Instantly</em>
+    </h1>
+    <p class="hero-sub">Paste a URL from YouTube, Vimeo, Twitter, TikTok and 1000+ sites.<br/>Choose your quality. Done.</p>
+  </section>
+
+  <!-- ═══ DOWNLOAD CARD ═══ -->
+  <main class="card-wrap">
+    <div class="card" id="downloadCard">
+
+      <!-- URL input row -->
+      <div class="input-group">
+        <label class="input-label" for="urlInput">VIDEO URL</label>
+        <div class="input-row">
+          <div class="input-icon">⬡</div>
+          <input
+            type="url"
+            id="urlInput"
+            class="url-input"
+            placeholder="https://www.youtube.com/watch?v=..."
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button class="paste-btn" id="pasteBtn" title="Paste from clipboard">PASTE</button>
+        </div>
+        <div class="input-underline"></div>
+      </div>
+
+      <!-- Quality selector -->
+      <div class="quality-row">
+        <span class="quality-label">QUALITY</span>
+        <div class="quality-pills" role="radiogroup" aria-label="Video quality">
+          <button class="pill" data-q="4K">4K <span class="pill-sub">2160p</span></button>
+          <button class="pill active" data-q="1080p">FHD <span class="pill-sub">1080p</span></button>
+          <button class="pill" data-q="720p">HD <span class="pill-sub">720p</span></button>
+          <button class="pill" data-q="480p">SD <span class="pill-sub">480p</span></button>
+          <button class="pill" data-q="best">BEST <span class="pill-sub">AUTO</span></button>
+        </div>
+      </div>
+
+      <!-- Action button -->
+      <button class="download-btn" id="downloadBtn">
+        <span class="btn-icon">↓</span>
+        <span class="btn-text">START DOWNLOAD</span>
+        <span class="btn-shine"></span>
+      </button>
+
+      <!-- Status panel (hidden until action) -->
+      <div class="status-panel" id="statusPanel" hidden>
+        <div class="status-header">
+          <span class="status-dot" id="statusDot"></span>
+          <span class="status-label" id="statusLabel">INITIALISING</span>
+          <span class="status-pct" id="statusPct"></span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-bar" id="progressBar"></div>
+          <div class="progress-shine"></div>
+        </div>
+        <p class="status-detail" id="statusDetail"></p>
+      </div>
+
+    </div><!-- /card -->
+  </main>
+
+  <!-- ═══ HISTORY ═══ -->
+  <section class="history-section" id="historySection">
+    <div class="history-header">
+      <h2 class="history-title">DOWNLOAD HISTORY</h2>
+      <button class="refresh-btn" id="refreshBtn" title="Refresh history">↺ REFRESH</button>
+    </div>
+    <div class="history-list" id="historyList">
+      <!-- Populated by JS -->
+      <div class="history-empty" id="historyEmpty">
+        <span class="empty-icon">◻</span>
+        <p>No downloads yet. Paste a URL above to get started.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ FOOTER ═══ -->
+  <footer class="footer">
+    <p>4K MASTER &nbsp;·&nbsp; Powered by yt-dlp &nbsp;·&nbsp; For personal use only</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
