@@ -18,11 +18,11 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 # Map UI quality labels to yt-dlp format strings
 QUALITY_FORMAT_MAP = {
-    "4K":    "best[height<=2160][ext=mp4]/best[height<=2160]/best",
-    "1080p": "best[height<=1080][ext=mp4]/best[height<=1080]/best",
-    "720p":  "best[height<=720][ext=mp4]/best[height<=720]/best",
-    "480p":  "best[height<=480][ext=mp4]/best[height<=480]/best",
-    "best":  "best[ext=mp4]/best",
+    "4K":    "best[height<=2160]/best",
+    "1080p": "best[height<=1080]/best",
+    "720p":  "best[height<=720]/best",
+    "480p":  "best[height<=480]/best",
+    "best":  "best",
 }
 
 
