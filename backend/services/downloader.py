@@ -44,45 +44,32 @@ def _make_progress_hook(video_id: int):
 
     return hook
 
-
 def _run_download(video_id: int, url: str, quality: str):
-    """
-    Blocking download — intended to run inside a background thread.
-    Updates the DB record through its lifecycle.
-    """
-    fmt = QUALITY_FORMAT_MAP.get(quality, QUALITY_FORMAT_MAP["best"])
-
+    fmt = QUALITY_FORMAT_MAP.get(quality, "best")
+    
     ydl_opts = {
-    "outtmpl": os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s"),
-    "progress_hooks": [_make_progress_hook(video_id)],
-    "quiet": True,
-    "no_warnings": True,
-    "geo_bypass": True,
-    "abort_on_error": False,
-    "cookiefile": os.path.join(os.path.dirname(__file__), "..", "..", "cookies.txt"),
+        "outtmpl": os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s"),
+        "progress_hooks": [_make_progress_hook(video_id)],
+        "quiet": True,
+        "no_warnings": True,
+        "geo_bypass": True,
+        "abort_on_error": False,
+        "cookiefile": os.path.join(os.path.dirname(__file__), "..", "..", "cookies.txt"),
     }
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Extract info first to get the title
             info = ydl.extract_info(url, download=False)
-            title = info.get("title", "Unknown")[:120]  # truncate long titles
+            title = info.get("title", "Unknown")[:120]
             update_video(video_id, title=title)
-
-            # Now actually download
             ydl.download([url])
 
-        update_video(video_id, status="done", progress=100)
-        logger.info("Download complete [id=%d] %s", video_id, title)
-
-    except yt_dlp.utils.DownloadError as exc:
-        msg = str(exc)[:300]
-        update_video(video_id, status="error", error_msg=msg)
-        logger.error("Download failed [id=%d]: %s", video_id, msg)
-
-    except Exception as exc:  # noqa: BLE001
-        msg = f"Unexpected error: {exc}"[:300]
-        update_video(video_id, status="error", error_msg=msg)
-        logger.exception("Unexpected download error [id=%d]", video_id)
+        # احفظ اسم الملف في DB
+        filename = ydl_opts["outtmpl"] % {"title": title, "ext": "mp4"}
+        update_video(video_id, status="done", progress=100, filename=filename)
+        
+    except Exception as exc:
+        update_video(video_id, status="error", error_msg=str(exc)[:300])
 
 
 def start_download(video_id: int, url: str, quality: str):

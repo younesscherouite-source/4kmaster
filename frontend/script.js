@@ -6,24 +6,24 @@
 'use strict';
 
 /* ═══ DOM refs ═══ */
-const urlInput    = document.getElementById('urlInput');
-const pasteBtn    = document.getElementById('pasteBtn');
+const urlInput = document.getElementById('urlInput');
+const pasteBtn = document.getElementById('pasteBtn');
 const downloadBtn = document.getElementById('downloadBtn');
 const statusPanel = document.getElementById('statusPanel');
-const statusDot   = document.getElementById('statusDot');
+const statusDot = document.getElementById('statusDot');
 const statusLabel = document.getElementById('statusLabel');
-const statusPct   = document.getElementById('statusPct');
+const statusPct = document.getElementById('statusPct');
 const progressBar = document.getElementById('progressBar');
-const statusDetail= document.getElementById('statusDetail');
+const statusDetail = document.getElementById('statusDetail');
 const historyList = document.getElementById('historyList');
-const historyEmpty= document.getElementById('historyEmpty');
-const refreshBtn  = document.getElementById('refreshBtn');
-const pills       = document.querySelectorAll('.pill');
+const historyEmpty = document.getElementById('historyEmpty');
+const refreshBtn = document.getElementById('refreshBtn');
+const pills = document.querySelectorAll('.pill');
 
 /* ═══ State ═══ */
 let selectedQuality = '1080p';
-let pollInterval    = null;   // setInterval handle for progress polling
-let activeVideoId   = null;   // currently downloading video id
+let pollInterval = null;   // setInterval handle for progress polling
+let activeVideoId = null;   // currently downloading video id
 
 /* ═══ Quality pill selection ═══ */
 pills.forEach(pill => {
@@ -61,14 +61,14 @@ function showStatus({ label, pct, detail, state = 'loading' }) {
   statusPanel.hidden = false;
 
   statusLabel.textContent = label.toUpperCase();
-  statusPct.textContent   = pct !== undefined ? `${pct}%` : '';
-  statusDetail.textContent= detail || '';
+  statusPct.textContent = pct !== undefined ? `${pct}%` : '';
+  statusDetail.textContent = detail || '';
 
   progressBar.style.width = `${pct ?? 0}%`;
 
   // State classes on dot
   statusDot.className = 'status-dot';
-  if (state === 'done')  statusDot.classList.add('done');
+  if (state === 'done') statusDot.classList.add('done');
   if (state === 'error') statusDot.classList.add('error');
 }
 
@@ -79,21 +79,40 @@ function startPolling(videoId) {
 
   pollInterval = setInterval(async () => {
     try {
-      const res  = await fetch(`/api/videos/${videoId}`);
+      const res = await fetch(`/api/videos/${videoId}`);
       const data = await res.json();
 
       if (data.status === 'downloading') {
         showStatus({
-          label:  'Downloading',
-          pct:    data.progress,
+          label: 'Downloading',
+          pct: data.progress,
           detail: data.file_size ? `File size: ${data.file_size}` : 'Fetching video info…',
-          state:  'loading',
+          state: 'loading',
         });
       }
 
       if (data.status === 'done') {
         clearInterval(pollInterval);
-        showStatus({ label: 'Download complete ✓', pct: 100, detail: data.title, state: 'done' });
+        showStatus({
+          label: 'Download complete ✓',
+          pct: 100,
+          detail: data.title,
+          state: 'done'
+        });
+
+        // زيد زر تحميل مباشر للPC
+        const existingBtn = document.getElementById('saveBtn');
+        if (!existingBtn) {
+          const dlBtn = document.createElement('a');
+          dlBtn.id = 'saveBtn';
+          dlBtn.href = `/api/download-file/${encodeURIComponent(data.title)}.mp4`;
+          dlBtn.download = `${data.title}.mp4`;
+          dlBtn.className = 'download-btn';
+          dlBtn.style.cssText = 'margin-top:12px; display:flex; text-decoration:none; background: linear-gradient(135deg, #00e676, #00b248);';
+          dlBtn.innerHTML = '<span class="btn-icon">⬇</span><span class="btn-text">SAVE TO PC</span>';
+          statusPanel.appendChild(dlBtn);
+        }
+
         downloadBtn.disabled = false;
         loadHistory();
       }
@@ -125,9 +144,9 @@ downloadBtn.addEventListener('click', async () => {
   }
   if (!isValidUrl(url)) {
     showStatus({
-      label:  'Invalid URL',
+      label: 'Invalid URL',
       detail: 'URL must start with http:// or https://',
-      state:  'error', pct: 0,
+      state: 'error', pct: 0,
     });
     return;
   }
@@ -137,10 +156,10 @@ downloadBtn.addEventListener('click', async () => {
   showStatus({ label: 'Starting download…', pct: 0, detail: url, state: 'loading' });
 
   try {
-    const res  = await fetch('/api/download', {
-      method:  'POST',
+    const res = await fetch('/api/download', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ url, quality: selectedQuality }),
+      body: JSON.stringify({ url, quality: selectedQuality }),
     });
     const data = await res.json();
 
@@ -164,10 +183,10 @@ downloadBtn.addEventListener('click', async () => {
 /* ═══ Format relative time ═══ */
 function relTime(isoStr) {
   const diff = (Date.now() - new Date(isoStr + 'Z')) / 1000;
-  if (diff < 60)   return 'just now';
-  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
-  if (diff < 86400)return `${Math.floor(diff/3600)}h ago`;
-  return `${Math.floor(diff/86400)}d ago`;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
 }
 
 /* ═══ Render a single history row ═══ */
@@ -177,10 +196,10 @@ function renderHistoryItem(v) {
   item.dataset.id = v.id;
 
   const statusClass = v.status; // downloading | done | error
-  const progPct     = v.status === 'done' ? 100 : (v.progress ?? 0);
-  const progLabel   = v.status === 'done' ? 'Complete'
-                    : v.status === 'error' ? 'Failed'
-                    : `${progPct}%`;
+  const progPct = v.status === 'done' ? 100 : (v.progress ?? 0);
+  const progLabel = v.status === 'done' ? 'Complete'
+    : v.status === 'error' ? 'Failed'
+      : `${progPct}%`;
 
   item.innerHTML = `
     <div class="hi-status ${statusClass}" title="${v.status}"></div>
@@ -217,7 +236,7 @@ function escHtml(str) {
 /* ═══ Load / refresh download history ═══ */
 async function loadHistory() {
   try {
-    const res    = await fetch('/api/videos');
+    const res = await fetch('/api/videos');
     const videos = await res.json();
 
     // Clear existing items (keep empty placeholder in DOM)
