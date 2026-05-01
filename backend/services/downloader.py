@@ -65,8 +65,7 @@ def _run_download(video_id: int, url: str, quality: str):
             ydl.download([url])
 
         # احفظ اسم الملف في DB
-        filename = ydl_opts["outtmpl"] % {"title": title, "ext": "mp4"}
-        update_video(video_id, status="done", progress=100, filename=filename)
+        update_video(video_id, status="done", progress=100, title=title)
         
     except Exception as exc:
         update_video(video_id, status="error", error_msg=str(exc)[:300])
