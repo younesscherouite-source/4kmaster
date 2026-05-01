@@ -1,6 +1,5 @@
 """
 Download service: wraps yt-dlp to download videos asynchronously.
-Progress is tracked in the DB so the frontend can poll for updates.
 """
 
 import os
@@ -12,11 +11,9 @@ from backend.models.video import update_video
 
 logger = logging.getLogger(__name__)
 
-# Where finished videos are saved
 DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-# Map UI quality labels to yt-dlp format strings
 QUALITY_FORMAT_MAP = {
     "4K":    "best[height<=2160]/best",
     "1080p": "best[height<=1080]/best",
@@ -27,10 +24,6 @@ QUALITY_FORMAT_MAP = {
 
 
 def _make_progress_hook(video_id: int):
-    """
-    Returns a yt-dlp progress hook that writes % and file size to the DB.
-    Called by yt-dlp several times per second during download.
-    """
     def hook(d: dict):
         if d["status"] == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
@@ -38,15 +31,15 @@ def _make_progress_hook(video_id: int):
             pct = int(downloaded / total * 100) if total else 0
             size_mb = f"{total / 1_048_576:.1f} MB" if total else ""
             update_video(video_id, progress=pct, file_size=size_mb)
-
         elif d["status"] == "finished":
-            update_video(video_id, progress=99)  # merging phase
-
+            # حفظ اسم الملف الحقيقي من yt-dlp
+            filepath = d.get("filename", "")
+            filename = os.path.basename(filepath)
+            update_video(video_id, progress=99, filename=filename)
     return hook
 
+
 def _run_download(video_id: int, url: str, quality: str):
-    fmt = QUALITY_FORMAT_MAP.get(quality, "best")
-    
     ydl_opts = {
         "outtmpl": os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s"),
         "progress_hooks": [_make_progress_hook(video_id)],
@@ -54,8 +47,12 @@ def _run_download(video_id: int, url: str, quality: str):
         "no_warnings": True,
         "geo_bypass": True,
         "abort_on_error": False,
-        "cookiefile": os.path.join(os.path.dirname(__file__), "..", "..", "cookies.txt"),
     }
+
+    # زيد cookies إذا كان الملف موجود
+    cookies_path = os.path.join(os.path.dirname(__file__), "..", "..", "cookies.txt")
+    if os.path.exists(cookies_path):
+        ydl_opts["cookiefile"] = cookies_path
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -64,17 +61,15 @@ def _run_download(video_id: int, url: str, quality: str):
             update_video(video_id, title=title)
             ydl.download([url])
 
-        # احفظ اسم الملف في DB
-        update_video(video_id, status="done", progress=100, title=title)
-        
+        update_video(video_id, status="done", progress=100)
+        logger.info("Download complete [id=%d]", video_id)
+
     except Exception as exc:
         update_video(video_id, status="error", error_msg=str(exc)[:300])
+        logger.error("Download failed [id=%d]: %s", video_id, exc)
 
 
 def start_download(video_id: int, url: str, quality: str):
-    """
-    Kick off a download in a daemon background thread so Flask stays responsive.
-    """
     t = threading.Thread(
         target=_run_download,
         args=(video_id, url, quality),
@@ -82,4 +77,3 @@ def start_download(video_id: int, url: str, quality: str):
         name=f"download-{video_id}",
     )
     t.start()
-    logger.info("Started download thread [id=%d] quality=%s", video_id, quality)

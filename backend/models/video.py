@@ -6,7 +6,6 @@ from backend.database.db import get_connection
 
 
 def create_video(url: str, quality: str) -> int:
-    """Insert a new download record; returns the new row id."""
     conn = get_connection()
     try:
         cur = conn.execute(
@@ -20,7 +19,6 @@ def create_video(url: str, quality: str) -> int:
 
 
 def update_video(video_id: int, **kwargs):
-    """Dynamically update any columns by keyword argument."""
     if not kwargs:
         return
     cols = ", ".join(f"{k} = ?" for k in kwargs)
@@ -33,8 +31,7 @@ def update_video(video_id: int, **kwargs):
         conn.close()
 
 
-def get_all_videos() -> list[dict]:
-    """Return all videos ordered by newest first."""
+def get_all_videos() -> list:
     conn = get_connection()
     try:
         rows = conn.execute(
@@ -45,8 +42,7 @@ def get_all_videos() -> list[dict]:
         conn.close()
 
 
-def get_video_by_id(video_id: int) -> dict | None:
-    """Return a single video record or None if not found."""
+def get_video_by_id(video_id: int):
     conn = get_connection()
     try:
         row = conn.execute(
