@@ -1,5 +1,6 @@
 """
 Download service: wraps yt-dlp with ffmpeg support.
+Uses imageio-ffmpeg as fallback to get ffmpeg binary.
 """
 
 import os
@@ -23,16 +24,40 @@ QUALITY_FORMAT_MAP = {
     "best":  "bestvideo+bestaudio/best",
 }
 
+FALLBACK_FORMAT_MAP = {
+    "4K":    "best[height<=2160]/best",
+    "1080p": "best[height<=1080]/best",
+    "720p":  "best[height<=720]/best",
+    "480p":  "best[height<=480]/best",
+    "best":  "best",
+}
 
-def _get_ffmpeg_location():
-    """Auto-detect ffmpeg — checks common paths."""
-    for path in ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/nix/var/nix/profiles/default/bin/ffmpeg"]:
-        if os.path.exists(path):
-            return os.path.dirname(path)
-    # Try PATH
+
+def _get_ffmpeg_dir():
+    """Get ffmpeg directory - tries system, then imageio-ffmpeg pip package."""
+    # 1. Check system PATH first
     found = shutil.which("ffmpeg")
     if found:
+        logger.info("ffmpeg found in PATH: %s", found)
         return os.path.dirname(found)
+
+    # 2. Try imageio-ffmpeg (installed via pip)
+    try:
+        import imageio_ffmpeg
+        path = imageio_ffmpeg.get_ffmpeg_exe()
+        if path and os.path.exists(path):
+            logger.info("ffmpeg found via imageio: %s", path)
+            return os.path.dirname(path)
+    except Exception as e:
+        logger.warning("imageio-ffmpeg not available: %s", e)
+
+    # 3. Common system paths
+    for p in ["/usr/bin", "/usr/local/bin", "/nix/var/nix/profiles/default/bin"]:
+        if os.path.exists(os.path.join(p, "ffmpeg")):
+            logger.info("ffmpeg found at: %s", p)
+            return p
+
+    logger.warning("ffmpeg NOT found — using fallback formats")
     return None
 
 
@@ -52,22 +77,11 @@ def _make_progress_hook(video_id: int):
 
 
 def _run_download(video_id: int, url: str, quality: str):
-    ffmpeg_loc = _get_ffmpeg_location()
-    has_ffmpeg = ffmpeg_loc is not None
-    logger.info("ffmpeg found: %s at %s", has_ffmpeg, ffmpeg_loc)
+    ffmpeg_dir = _get_ffmpeg_dir()
+    has_ffmpeg = ffmpeg_dir is not None
 
-    # Use merge format if ffmpeg available, else fallback to single-file
-    if has_ffmpeg:
-        fmt = QUALITY_FORMAT_MAP.get(quality, "bestvideo+bestaudio/best")
-    else:
-        # Fallback without ffmpeg - single file formats only
-        fmt = {
-            "4K":    "best[height<=2160]/best",
-            "1080p": "best[height<=1080]/best",
-            "720p":  "best[height<=720]/best",
-            "480p":  "best[height<=480]/best",
-            "best":  "best",
-        }.get(quality, "best")
+    fmt = QUALITY_FORMAT_MAP.get(quality, "bestvideo+bestaudio/best") if has_ffmpeg \
+          else FALLBACK_FORMAT_MAP.get(quality, "best")
 
     ydl_opts = {
         "format": fmt,
@@ -80,10 +94,9 @@ def _run_download(video_id: int, url: str, quality: str):
     }
 
     if has_ffmpeg:
-        ydl_opts["ffmpeg_location"] = ffmpeg_loc
+        ydl_opts["ffmpeg_location"] = ffmpeg_dir
         ydl_opts["merge_output_format"] = "mp4"
 
-    # Add cookies if file exists
     cookies_path = os.path.join(os.path.dirname(__file__), "..", "..", "cookies.txt")
     if os.path.exists(cookies_path):
         ydl_opts["cookiefile"] = cookies_path
@@ -96,12 +109,12 @@ def _run_download(video_id: int, url: str, quality: str):
             ydl.download([url])
 
         update_video(video_id, status="done", progress=100)
-        logger.info("Download complete [id=%d] ffmpeg=%s", video_id, has_ffmpeg)
+        logger.info("Done [id=%d] ffmpeg=%s", video_id, has_ffmpeg)
 
     except Exception as exc:
         msg = str(exc)[:300]
         update_video(video_id, status="error", error_msg=msg)
-        logger.error("Download failed [id=%d]: %s", video_id, msg)
+        logger.error("Failed [id=%d]: %s", video_id, msg)
 
 
 def start_download(video_id: int, url: str, quality: str):
