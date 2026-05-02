@@ -1,6 +1,5 @@
 """
-Download service: wraps yt-dlp with ffmpeg support.
-Uses imageio-ffmpeg as fallback to get ffmpeg binary.
+Download service: wraps yt-dlp with smart format selection.
 """
 
 import os
@@ -17,47 +16,28 @@ DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 QUALITY_FORMAT_MAP = {
-    "4K":    "bestvideo[height<=2160]+bestaudio/best[height<=2160]/best",
-    "1080p": "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
-    "720p":  "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
-    "480p":  "bestvideo[height<=480]+bestaudio/best[height<=480]/best",
-    "best":  "bestvideo+bestaudio/best",
-}
-
-FALLBACK_FORMAT_MAP = {
-    "4K":    "best[height<=2160]/best",
-    "1080p": "best[height<=1080]/best",
-    "720p":  "best[height<=720]/best",
-    "480p":  "best[height<=480]/best",
-    "best":  "best",
+    "4K":    "bestvideo[height<=2160]+bestaudio/bestvideo[height<=2160]/best[height<=2160]/best",
+    "1080p": "bestvideo[height<=1080]+bestaudio/bestvideo[height<=1080]/best[height<=1080]/best",
+    "720p":  "bestvideo[height<=720]+bestaudio/bestvideo[height<=720]/best[height<=720]/best",
+    "480p":  "bestvideo[height<=480]+bestaudio/bestvideo[height<=480]/best[height<=480]/best",
+    "best":  "bestvideo+bestaudio/bestvideo/best",
 }
 
 
 def _get_ffmpeg_dir():
-    """Get ffmpeg directory - tries system, then imageio-ffmpeg pip package."""
-    # 1. Check system PATH first
     found = shutil.which("ffmpeg")
     if found:
-        logger.info("ffmpeg found in PATH: %s", found)
         return os.path.dirname(found)
-
-    # 2. Try imageio-ffmpeg (installed via pip)
     try:
         import imageio_ffmpeg
         path = imageio_ffmpeg.get_ffmpeg_exe()
         if path and os.path.exists(path):
-            logger.info("ffmpeg found via imageio: %s", path)
             return os.path.dirname(path)
-    except Exception as e:
-        logger.warning("imageio-ffmpeg not available: %s", e)
-
-    # 3. Common system paths
+    except Exception:
+        pass
     for p in ["/usr/bin", "/usr/local/bin", "/nix/var/nix/profiles/default/bin"]:
         if os.path.exists(os.path.join(p, "ffmpeg")):
-            logger.info("ffmpeg found at: %s", p)
             return p
-
-    logger.warning("ffmpeg NOT found — using fallback formats")
     return None
 
 
@@ -76,14 +56,8 @@ def _make_progress_hook(video_id: int):
     return hook
 
 
-def _run_download(video_id: int, url: str, quality: str):
-    ffmpeg_dir = _get_ffmpeg_dir()
-    has_ffmpeg = ffmpeg_dir is not None
-
-    fmt = QUALITY_FORMAT_MAP.get(quality, "bestvideo+bestaudio/best") if has_ffmpeg \
-          else FALLBACK_FORMAT_MAP.get(quality, "best")
-
-    ydl_opts = {
+def _build_ydl_opts(fmt: str, video_id: int, ffmpeg_dir):
+    opts = {
         "format": fmt,
         "outtmpl": os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s"),
         "progress_hooks": [_make_progress_hook(video_id)],
@@ -91,17 +65,31 @@ def _run_download(video_id: int, url: str, quality: str):
         "no_warnings": True,
         "geo_bypass": True,
         "abort_on_error": False,
+        # مهم جداً — يجرب player clients مختلفة
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["ios", "web_creator", "android"],
+            }
+        },
     }
-
-    if has_ffmpeg:
-        ydl_opts["ffmpeg_location"] = ffmpeg_dir
-        ydl_opts["merge_output_format"] = "mp4"
+    if ffmpeg_dir:
+        opts["ffmpeg_location"] = ffmpeg_dir
+        opts["merge_output_format"] = "mp4"
 
     cookies_path = os.path.join(os.path.dirname(__file__), "..", "..", "cookies.txt")
     if os.path.exists(cookies_path):
-        ydl_opts["cookiefile"] = cookies_path
+        opts["cookiefile"] = cookies_path
+
+    return opts
+
+
+def _run_download(video_id: int, url: str, quality: str):
+    ffmpeg_dir = _get_ffmpeg_dir()
+    fmt = QUALITY_FORMAT_MAP.get(quality, "bestvideo+bestaudio/best")
 
     try:
+        ydl_opts = _build_ydl_opts(fmt, video_id, ffmpeg_dir)
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             title = info.get("title", "Unknown")[:120]
@@ -109,7 +97,7 @@ def _run_download(video_id: int, url: str, quality: str):
             ydl.download([url])
 
         update_video(video_id, status="done", progress=100)
-        logger.info("Done [id=%d] ffmpeg=%s", video_id, has_ffmpeg)
+        logger.info("Done [id=%d]", video_id)
 
     except Exception as exc:
         msg = str(exc)[:300]
