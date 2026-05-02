@@ -14,12 +14,13 @@ logger = logging.getLogger(__name__)
 DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
+# bestvideo+bestaudio = جودة حقيقية مع ffmpeg
 QUALITY_FORMAT_MAP = {
-    "4K":    "best[height<=2160]/best",
-    "1080p": "best[height<=1080]/best",
-    "720p":  "best[height<=720]/best",
-    "480p":  "best[height<=480]/best",
-    "best":  "best",
+    "4K":    "bestvideo[height<=2160]+bestaudio/bestvideo[height<=2160]/best",
+    "1080p": "bestvideo[height<=1080]+bestaudio/bestvideo[height<=1080]/best",
+    "720p":  "bestvideo[height<=720]+bestaudio/bestvideo[height<=720]/best",
+    "480p":  "bestvideo[height<=480]+bestaudio/bestvideo[height<=480]/best",
+    "best":  "bestvideo+bestaudio/best",
 }
 
 
@@ -32,7 +33,6 @@ def _make_progress_hook(video_id: int):
             size_mb = f"{total / 1_048_576:.1f} MB" if total else ""
             update_video(video_id, progress=pct, file_size=size_mb)
         elif d["status"] == "finished":
-            # حفظ اسم الملف الحقيقي من yt-dlp
             filepath = d.get("filename", "")
             filename = os.path.basename(filepath)
             update_video(video_id, progress=99, filename=filename)
@@ -40,16 +40,23 @@ def _make_progress_hook(video_id: int):
 
 
 def _run_download(video_id: int, url: str, quality: str):
+    # استعمل الـ format الصحيح حسب الجودة المختارة
+    fmt = QUALITY_FORMAT_MAP.get(quality, "bestvideo+bestaudio/best")
+
     ydl_opts = {
+        "format": fmt,                          # ← الجودة الحقيقية
+        "merge_output_format": "mp4",           # ← دمج الفيديو والصوت
         "outtmpl": os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s"),
         "progress_hooks": [_make_progress_hook(video_id)],
         "quiet": True,
         "no_warnings": True,
         "geo_bypass": True,
         "abort_on_error": False,
+        # ffmpeg path على Railway بعد nixpacks
+        "ffmpeg_location": "/usr/bin/ffmpeg",
     }
 
-    # زيد cookies إذا كان الملف موجود
+    # زيد cookies إذا موجودة
     cookies_path = os.path.join(os.path.dirname(__file__), "..", "..", "cookies.txt")
     if os.path.exists(cookies_path):
         ydl_opts["cookiefile"] = cookies_path
@@ -65,8 +72,9 @@ def _run_download(video_id: int, url: str, quality: str):
         logger.info("Download complete [id=%d]", video_id)
 
     except Exception as exc:
-        update_video(video_id, status="error", error_msg=str(exc)[:300])
-        logger.error("Download failed [id=%d]: %s", video_id, exc)
+        msg = str(exc)[:300]
+        update_video(video_id, status="error", error_msg=msg)
+        logger.error("Download failed [id=%d]: %s", video_id, msg)
 
 
 def start_download(video_id: int, url: str, quality: str):
