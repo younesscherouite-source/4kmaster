@@ -1,14 +1,11 @@
 """
-REST API routes:
-  POST /api/download          — enqueue a new download
-  GET  /api/videos            — list all downloads
-  GET  /api/videos/<id>       — poll a single download for progress
-  GET  /api/download-file/<f> — download the file to PC
+REST API routes
 """
 
 import re
 import logging
 import os
+import yt_dlp
 from flask import Blueprint, request, jsonify, send_from_directory
 
 from backend.models.video import create_video, get_all_videos, get_video_by_id
@@ -19,6 +16,44 @@ api = Blueprint("api", __name__, url_prefix="/api")
 
 VALID_QUALITIES = list(QUALITY_FORMAT_MAP.keys())
 URL_RE = re.compile(r"^https?://", re.IGNORECASE)
+
+
+@api.route("/formats", methods=["POST"])
+def list_formats():
+    """Debug: list available formats for a URL"""
+    data = request.get_json(silent=True) or {}
+    url = (data.get("url") or "").strip()
+    if not url:
+        return jsonify({"error": "URL required"}), 400
+
+    cookies_path = os.path.join(os.path.dirname(__file__), "..", "..", "cookies.txt")
+    ydl_opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "extractor_args": {
+            "youtube": {"player_client": ["ios", "web_creator", "android"]}
+        },
+    }
+    if os.path.exists(cookies_path):
+        ydl_opts["cookiefile"] = cookies_path
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            formats = [
+                {
+                    "format_id": f.get("format_id"),
+                    "ext": f.get("ext"),
+                    "height": f.get("height"),
+                    "vcodec": f.get("vcodec"),
+                    "acodec": f.get("acodec"),
+                    "filesize": f.get("filesize"),
+                }
+                for f in info.get("formats", [])
+            ]
+            return jsonify({"title": info.get("title"), "formats": formats})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @api.route("/download", methods=["POST"])
@@ -36,8 +71,6 @@ def download():
 
     video_id = create_video(url, quality)
     start_download(video_id, url, quality)
-
-    logger.info("Enqueued download id=%d url=%s quality=%s", video_id, url, quality)
     return jsonify({"id": video_id, "message": "Download started!"}), 202
 
 
@@ -56,9 +89,4 @@ def get_video(video_id: int):
 
 @api.route("/download-file/<path:filename>")
 def download_file(filename):
-    """إرسال الفيديو مباشرة للمتصفح"""
-    return send_from_directory(
-        os.path.abspath(DOWNLOAD_DIR),
-        filename,
-        as_attachment=True
-    )
+    return send_from_directory(os.path.abspath(DOWNLOAD_DIR), filename, as_attachment=True)
