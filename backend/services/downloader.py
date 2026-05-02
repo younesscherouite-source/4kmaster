@@ -1,5 +1,6 @@
 """
-Download service: wraps yt-dlp with smart format selection.
+Download service - uses best available format from server.
+Note: YouTube restricts cloud servers to 360p max.
 """
 
 import os
@@ -16,11 +17,11 @@ DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 QUALITY_FORMAT_MAP = {
-    "4K":    "bestvideo[height<=2160]+bestaudio/bestvideo[height<=2160]/best[height<=2160]/best",
-    "1080p": "bestvideo[height<=1080]+bestaudio/bestvideo[height<=1080]/best[height<=1080]/best",
-    "720p":  "bestvideo[height<=720]+bestaudio/bestvideo[height<=720]/best[height<=720]/best",
-    "480p":  "bestvideo[height<=480]+bestaudio/bestvideo[height<=480]/best[height<=480]/best",
-    "best":  "bestvideo+bestaudio/bestvideo/best",
+    "4K":    "18/best",
+    "1080p": "18/best",
+    "720p":  "18/best",
+    "480p":  "18/best",
+    "best":  "18/best",
 }
 
 
@@ -35,9 +36,6 @@ def _get_ffmpeg_dir():
             return os.path.dirname(path)
     except Exception:
         pass
-    for p in ["/usr/bin", "/usr/local/bin", "/nix/var/nix/profiles/default/bin"]:
-        if os.path.exists(os.path.join(p, "ffmpeg")):
-            return p
     return None
 
 
@@ -56,8 +54,11 @@ def _make_progress_hook(video_id: int):
     return hook
 
 
-def _build_ydl_opts(fmt: str, video_id: int, ffmpeg_dir):
-    opts = {
+def _run_download(video_id: int, url: str, quality: str):
+    ffmpeg_dir = _get_ffmpeg_dir()
+    fmt = QUALITY_FORMAT_MAP.get(quality, "18/best")
+
+    ydl_opts = {
         "format": fmt,
         "outtmpl": os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s"),
         "progress_hooks": [_make_progress_hook(video_id)],
@@ -65,31 +66,22 @@ def _build_ydl_opts(fmt: str, video_id: int, ffmpeg_dir):
         "no_warnings": True,
         "geo_bypass": True,
         "abort_on_error": False,
-        # مهم جداً — يجرب player clients مختلفة
         "extractor_args": {
             "youtube": {
                 "player_client": ["ios", "web_creator", "android"],
             }
         },
     }
+
     if ffmpeg_dir:
-        opts["ffmpeg_location"] = ffmpeg_dir
-        opts["merge_output_format"] = "mp4"
+        ydl_opts["ffmpeg_location"] = ffmpeg_dir
+        ydl_opts["merge_output_format"] = "mp4"
 
     cookies_path = os.path.join(os.path.dirname(__file__), "..", "..", "cookies.txt")
     if os.path.exists(cookies_path):
-        opts["cookiefile"] = cookies_path
-
-    return opts
-
-
-def _run_download(video_id: int, url: str, quality: str):
-    ffmpeg_dir = _get_ffmpeg_dir()
-    fmt = QUALITY_FORMAT_MAP.get(quality, "bestvideo+bestaudio/best")
+        ydl_opts["cookiefile"] = cookies_path
 
     try:
-        ydl_opts = _build_ydl_opts(fmt, video_id, ffmpeg_dir)
-
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             title = info.get("title", "Unknown")[:120]
