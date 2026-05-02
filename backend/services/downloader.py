@@ -1,8 +1,9 @@
 """
-Download service: wraps yt-dlp to download videos asynchronously.
+Download service: wraps yt-dlp with ffmpeg support.
 """
 
 import os
+import shutil
 import threading
 import logging
 import yt_dlp
@@ -14,14 +15,25 @@ logger = logging.getLogger(__name__)
 DOWNLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-# bestvideo+bestaudio = جودة حقيقية مع ffmpeg
 QUALITY_FORMAT_MAP = {
-    "4K":    "bestvideo[height<=2160]+bestaudio/bestvideo[height<=2160]/best",
-    "1080p": "bestvideo[height<=1080]+bestaudio/bestvideo[height<=1080]/best",
-    "720p":  "bestvideo[height<=720]+bestaudio/bestvideo[height<=720]/best",
-    "480p":  "bestvideo[height<=480]+bestaudio/bestvideo[height<=480]/best",
+    "4K":    "bestvideo[height<=2160]+bestaudio/best[height<=2160]/best",
+    "1080p": "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best",
+    "720p":  "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
+    "480p":  "bestvideo[height<=480]+bestaudio/best[height<=480]/best",
     "best":  "bestvideo+bestaudio/best",
 }
+
+
+def _get_ffmpeg_location():
+    """Auto-detect ffmpeg — checks common paths."""
+    for path in ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/nix/var/nix/profiles/default/bin/ffmpeg"]:
+        if os.path.exists(path):
+            return os.path.dirname(path)
+    # Try PATH
+    found = shutil.which("ffmpeg")
+    if found:
+        return os.path.dirname(found)
+    return None
 
 
 def _make_progress_hook(video_id: int):
@@ -40,23 +52,38 @@ def _make_progress_hook(video_id: int):
 
 
 def _run_download(video_id: int, url: str, quality: str):
-    # استعمل الـ format الصحيح حسب الجودة المختارة
-    fmt = QUALITY_FORMAT_MAP.get(quality, "bestvideo+bestaudio/best")
+    ffmpeg_loc = _get_ffmpeg_location()
+    has_ffmpeg = ffmpeg_loc is not None
+    logger.info("ffmpeg found: %s at %s", has_ffmpeg, ffmpeg_loc)
+
+    # Use merge format if ffmpeg available, else fallback to single-file
+    if has_ffmpeg:
+        fmt = QUALITY_FORMAT_MAP.get(quality, "bestvideo+bestaudio/best")
+    else:
+        # Fallback without ffmpeg - single file formats only
+        fmt = {
+            "4K":    "best[height<=2160]/best",
+            "1080p": "best[height<=1080]/best",
+            "720p":  "best[height<=720]/best",
+            "480p":  "best[height<=480]/best",
+            "best":  "best",
+        }.get(quality, "best")
 
     ydl_opts = {
-        "format": fmt,                          # ← الجودة الحقيقية
-        "merge_output_format": "mp4",           # ← دمج الفيديو والصوت
+        "format": fmt,
         "outtmpl": os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s"),
         "progress_hooks": [_make_progress_hook(video_id)],
         "quiet": True,
         "no_warnings": True,
         "geo_bypass": True,
         "abort_on_error": False,
-        # ffmpeg path على Railway بعد nixpacks
-        "ffmpeg_location": "/usr/bin/ffmpeg",
     }
 
-    # زيد cookies إذا موجودة
+    if has_ffmpeg:
+        ydl_opts["ffmpeg_location"] = ffmpeg_loc
+        ydl_opts["merge_output_format"] = "mp4"
+
+    # Add cookies if file exists
     cookies_path = os.path.join(os.path.dirname(__file__), "..", "..", "cookies.txt")
     if os.path.exists(cookies_path):
         ydl_opts["cookiefile"] = cookies_path
@@ -69,7 +96,7 @@ def _run_download(video_id: int, url: str, quality: str):
             ydl.download([url])
 
         update_video(video_id, status="done", progress=100)
-        logger.info("Download complete [id=%d]", video_id)
+        logger.info("Download complete [id=%d] ffmpeg=%s", video_id, has_ffmpeg)
 
     except Exception as exc:
         msg = str(exc)[:300]
